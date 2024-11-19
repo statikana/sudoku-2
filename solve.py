@@ -53,6 +53,7 @@ class Sudoku:
         possible_map = self.create_simple_possible()
         for position in self.positions():
             possible_values = tuple(map(int, tuple(possible_map[position])))
+            print(possible_values)
             primary_map.setdefault(possible_values, set())
             primary_map[possible_values].add(position)
         
@@ -72,4 +73,7 @@ class Sudoku:
 board = easy_1
 
 sudoku = Sudoku(np.array(board), tuple(range(1, 10)), 3, 3)
-print(sudoku.solve())
+import pprint
+pprint.pprint(sudoku.create_simple_possible())
+# pprint.pprint(sudoku.create_reverse_possible_key())
+# print(sudoku.solve())
