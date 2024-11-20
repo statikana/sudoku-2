@@ -1,11 +1,11 @@
 import numpy as np
-from typing import Any, Optional
+from typing import Any, Iterable, Optional, Sequence
 from itertools import product
 from puzzles import *
 
 
 class Sudoku:
-    def __init__(self, board: np.ndarray, symbols: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9), box_height: int = 3, box_width: int = 3):
+    def __init__(self, board: np.ndarray, symbols: Sequence[int] = (1, 2, 3, 4, 5, 6, 7, 8, 9), box_height: int = 3, box_width: int = 3):
         self.board = board
         self.symbols = symbols
         self.height, self.width = self.board.shape
@@ -34,46 +34,85 @@ class Sudoku:
         return set(row) | set(col) | set(box) - {position}
         
     
-    def create_simple_possible(self) -> np.ndarray:
+    def create_possible_map(self) -> np.ndarray:
         """Creates a 3D array which represents all possible symbols which could exist in an area, using guarenteed information (no problem-solving heuristics)"""
-        slate = np.ones((self.height, self.width, self.depth))  # every symbol is possible in every position
-        for row, col in self.positions():
-            connected = self.get_connected_positions((row, col))
-            for c_row, c_col in connected:
-                c_symbol = self.board[c_row, c_col]
+        slate = np.ones((self.height, self.width, self.depth), dtype=bool)  # every symbol is possible in every position
+        for pos in self.positions():
+            if self.board[pos] in self.symbols:
+                slate[pos] = np.zeros((self.depth,))
+                continue
+            connected = self.get_connected_positions(pos)
+            for connected_pos in connected:
+                symbol = self.board[connected_pos]
                 try:
-                    slate[row, col][self.symbols.index(c_symbol)] = 0
+                    slate[pos][self.symbols.index(symbol)] = 0
                 except ValueError:
                     continue  # the value is empty
         return slate
 
-    def create_reverse_possible_key(self) -> dict[tuple[int, ...], set[tuple[int, int]]]:
-        """Creates a dictionary which matches each unique "possible" key to the positions on the board which contain that specific possible key"""
+    def chunk_possible_map(self, possible_map: Optional[np.ndarray] = None) -> dict[tuple[int, ...], set[tuple[int, int]]]:
+        """Creates a dictionary which matches each unique "possible" map to the positions on the board which contain that specific possible map"""
+        if possible_map is None:
+            possible_map = self.create_possible_map()
+
         primary_map = {}
-        possible_map = self.create_simple_possible()
+
         for position in self.positions():
             possible_values = tuple(map(int, tuple(possible_map[position])))
-            print(possible_values)
             primary_map.setdefault(possible_values, set())
             primary_map[possible_values].add(position)
         
         return primary_map
 
 
-    def solve(self):
-        rpk = self.create_reverse_possible_key()
-
-        # using rpk, solve ones
+    def solve_iteration(self):
+        rpk = self.chunk_possible_map()
+        possible_map = self.create_possible_map()
+        # print(possible_map)
 
         for possible, positions in rpk.items():
-            n = sum(possible)
-            print(n, possible, positions)
+            positions = list(positions)
+            n_possible = sum(possible)
+            n_existing = len(positions)
+
+            # print(possible, positions)
+            
+            if n_possible != n_existing:
+                # print("skip")
+                continue
+            
+            connected = self.get_connected_positions(positions[0])
+            if not all([p in connected for p in positions[1:]]):
+                # print("skip 2")
+                continue
+                
+            for position in connected:
+                if position in positions:
+                    continue  # the connected pos is part of the group we just created
+                # print("\t rem", position)
+                # print(possible_map[position])
+                possible_map[position] &= ~np.array(possible, dtype=bool)
+                # print(possible_map[position])
+            
+        # print(possible_map)
+        
+        self.replace_singles(possible_map=possible_map)
 
 
-board = easy_1
+    def replace_singles(self, possible_map: Optional[np.ndarray] = None) -> None:
+        # replace all single possible map keys with the value
+        if possible_map is None:
+            possible_map = self.create_possible_map()
 
-sudoku = Sudoku(np.array(board), tuple(range(1, 10)), 3, 3)
+        for pos in self.positions():
+            if self.board[pos] not in self.symbols and sum(possible_map[pos]) == 1:
+                self.board[pos] = self.symbols[list(possible_map[pos]).index(1)]
+
+
+board = solved_1
+
+sudoku = Sudoku(np.array(board), range(1, 10), 3, 3)
 import pprint
-pprint.pprint(sudoku.create_simple_possible())
-# pprint.pprint(sudoku.create_reverse_possible_key())
-# print(sudoku.solve())
+print(sudoku.board)
+sudoku.solve_iteration()
+print(sudoku.board)
