@@ -1,7 +1,8 @@
 import numpy as np
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Container, Generator, Iterable, Optional, Sequence
 from itertools import product
 from puzzles import *
+from pprint import pprint
 
 
 class Sudoku:
@@ -44,10 +45,8 @@ class Sudoku:
             connected = self.get_connected_positions(pos)
             for connected_pos in connected:
                 symbol = self.board[connected_pos]
-                try:
+                if symbol in self.symbols:
                     slate[pos][self.symbols.index(symbol)] = 0
-                except ValueError:
-                    continue  # the value is empty
         return slate
 
     def chunk_possible_map(self, possible_map: Optional[np.ndarray] = None) -> dict[tuple[int, ...], set[tuple[int, int]]]:
@@ -64,55 +63,77 @@ class Sudoku:
         
         return primary_map
 
-
-    def solve_iteration(self):
-        rpk = self.chunk_possible_map()
+    def solve(self) -> None:
         possible_map = self.create_possible_map()
-        # print(possible_map)
+        presum = possible_map[:,:,].sum()
+        for k in (1, 2, 3, 4):
+            k_matches = list(self.find_n_possible(possible_map, k))
+            # print(k_matches)
+            # pprint([possible_map[b] for b in k_matches])
+            groups: list[list[tuple[int, int]]] = []
 
-        for possible, positions in rpk.items():
-            positions = list(positions)
-            n_possible = sum(possible)
-            n_existing = len(positions)
+            for k_match in k_matches:
+                # print(k_match)
+                if k_match in flatten(groups):
+                    continue
+                def is_similar(base: tuple[int, int], test: tuple[int, int]):
+                    return test in k_matches and all(possible_map[test] == possible_map[base]) and test != base
 
-            # print(possible, positions)
+                group = list(filter(lambda k_connected: is_similar(k_match, k_connected), self.get_connected_positions(k_match)))
+                group.append(k_match)
+                groups.append(group)
+
+                # print(group)
+
+            # print(groups)
+
+            for group in groups:
+                # all positions in group are in the same connected region and have the same possible valuesc
+                common_possible = possible_map[group[0]]  # via .is_similar(), these are guarenteeed to have not only the same n, but also just the same values too
+                for element in group:
+                    connected = self.get_connected_positions(element)
+                    for con in connected:
+                        if con not in group:
+                            possible_map[con] &= ~common_possible
             
-            if n_possible != n_existing:
-                # print("skip")
-                continue
+        print(presum)
+        print(possible_map[:,:,].sum())
             
-            connected = self.get_connected_positions(positions[0])
-            if not all([p in connected for p in positions[1:]]):
-                # print("skip 2")
-                continue
                 
-            for position in connected:
-                if position in positions:
-                    continue  # the connected pos is part of the group we just created
-                # print("\t rem", position)
-                # print(possible_map[position])
-                possible_map[position] &= ~np.array(possible, dtype=bool)
-                # print(possible_map[position])
-            
-        # print(possible_map)
-        
-        self.replace_singles(possible_map=possible_map)
+                
 
-
-    def replace_singles(self, possible_map: Optional[np.ndarray] = None) -> None:
-        # replace all single possible map keys with the value
-        if possible_map is None:
-            possible_map = self.create_possible_map()
-
+    
+    def find_n_possible(self, possible_map: np.ndarray, n: int) -> Generator[tuple[int, int], None, None]:
         for pos in self.positions():
-            if self.board[pos] not in self.symbols and sum(possible_map[pos]) == 1:
-                self.board[pos] = self.symbols[list(possible_map[pos]).index(1)]
+            if sum(possible_map[pos]) == n:
+                yield pos
+    
+    def is_solved(self):
+        return self.is_filled() and self.is_valid()
+
+    def is_filled(self) -> bool:
+        return bool(self.board.nonzero())
+    
+    def is_valid(self) -> bool:
+        for pos in self.positions():
+            symbol = self.board[pos]
+            for c in self.get_connected_positions(pos):
+                if self.board[c] == symbol and pos != c:
+                    print("oops", pos, c, symbol)
+                    return False
+        return True
 
 
-board = solved_1
+def flatten(l):
+    for b in l:
+        for a in b:
+            yield a
 
-sudoku = Sudoku(np.array(board), range(1, 10), 3, 3)
-import pprint
+
+board = medium_1
+
+sudoku = Sudoku(np.array(board))
+
 print(sudoku.board)
-sudoku.solve_iteration()
+sudoku.solve()
 print(sudoku.board)
